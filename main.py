@@ -12,9 +12,10 @@ from tensorflow.python.platform import flags
 FLAGS = flags.FLAGS
 
 ## Dataset/method options
-flags.DEFINE_string('datasource', 'plainmulti', '2D or plainmulti or artmulti')
+flags.DEFINE_string('datasource', 'plainmulti', '2D or plainmulti or artmulti or domainNet')
+flags.DEFINE_integer('num_datasets', 4, 'The number of datasets to use plainmulti: 0-5 domainNet: 0-5')
 flags.DEFINE_integer('test_dataset', -1,
-                     'which data to be test, plainmulti: 0-3, artmulti: 0-11, -1: random select')
+                     'which data to be test, plainmulti: 0-3, artmulti: 0-11, -1: random select ')
 flags.DEFINE_integer('num_classes', 5, 'number of classes used in classification (e.g. 5-way classification).')
 flags.DEFINE_integer('num_test_task', 1000, 'number of test tasks.')
 flags.DEFINE_integer('test_epoch', -1, 'test epoch, only work when test start')
@@ -53,7 +54,7 @@ flags.DEFINE_bool('test_set', True, 'Set to true to evaluate on the the test set
 
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
-    SAVE_INTERVAL = 1000
+    SAVE_INTERVAL = 20000
     if FLAGS.datasource in ['2D']:
         PRINT_INTERVAL = 1000
     else:
@@ -163,7 +164,7 @@ def main():
     dim_output = data_generator.dim_output
     dim_input = data_generator.dim_input
 
-    if FLAGS.datasource in ['plainmulti', 'artmulti']:
+    if FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti']:
         num_classes = data_generator.num_classes
         if FLAGS.train:
             random.seed(5)
@@ -171,6 +172,8 @@ def main():
                 image_tensor, label_tensor = data_generator.make_data_tensor_plainmulti()
             elif FLAGS.datasource == 'artmulti':
                 image_tensor, label_tensor = data_generator.make_data_tensor_artmulti()
+            elif FLAGS.datasource == 'domainNet':
+                image_tensor, label_tensor = data_generator.make_data_tensor_domainNet()
             inputa = tf.slice(image_tensor, [0, 0, 0], [-1, num_classes * FLAGS.update_batch_size, -1])
             inputb = tf.slice(image_tensor, [0, num_classes * FLAGS.update_batch_size, 0], [-1, -1, -1])
             labela = tf.slice(label_tensor, [0, 0, 0], [-1, num_classes * FLAGS.update_batch_size, -1])
@@ -182,6 +185,8 @@ def main():
                 image_tensor, label_tensor = data_generator.make_data_tensor_plainmulti(train=False)
             elif FLAGS.datasource == 'artmulti':
                 image_tensor, label_tensor = data_generator.make_data_tensor_artmulti(train=False)
+            elif FLAGS.datasource == 'domainNet':
+                image_tensor, label_tensor = data_generator.make_data_tensor_domainNet(train=False)
             inputa = tf.slice(image_tensor, [0, 0, 0], [-1, num_classes * FLAGS.update_batch_size, -1])
             inputb = tf.slice(image_tensor, [0, num_classes * FLAGS.update_batch_size, 0], [-1, -1, -1])
             labela = tf.slice(label_tensor, [0, 0, 0], [-1, num_classes * FLAGS.update_batch_size, -1])

@@ -61,7 +61,7 @@ class MetaGraph(object):
         self.GCN = GraphConvolution(self.hidden_dim, name='data_gcn')
 
     def model(self, inputs):
-        if FLAGS.datasource in ['plainmulti', 'artmulti']:
+        if FLAGS.datasource in ['plainmulti', 'artmulti', 'domainNet']:
             sigma = 8.0
         elif FLAGS.datasource in ['2D']:
             sigma = 2.0
