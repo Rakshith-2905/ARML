@@ -8,6 +8,8 @@ import tensorflow as tf
 from tensorflow.python.platform import flags
 import pickle
 from utils import get_images
+import math
+from sklearn.utils import shuffle
 import ipdb
 
 FLAGS = flags.FLAGS
@@ -127,6 +129,46 @@ class DataGenerator(object):
             self.metatrain_character_folders = metatrain_folders
             self.metaval_character_folders = metaval_folders
             self.rotations = config.get('rotations', [0])
+
+        elif FLAGS.datasource == 'synthetic':
+            num_total_batches = 200000
+            self.num_classes = 2
+            self.img_size = config.get('img_size', (84, 84))
+            self.dim_input = np.prod(self.img_size) * 3
+            self.dim_output = self.num_classes
+            self.latent_dim = 128
+
+            if FLAGS.create_synth:
+                print('Creating synthetic data')
+                gauss_features = np.random.normal(size=[self.latent_dim, self.dim_input])
+                                
+                with open('synthetic_data/gauss_features_1.pickle', 'wb') as handle:
+                    pickle.dump(gauss_features, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                
+                thetas = {}
+                # gauss teacher for all tasks in the training set
+                theta1 = np.random.normal(loc=0.0, scale=1.0, size=[num_total_batches, self.latent_dim, 1])
+                theta2 = np.random.normal(loc=1.0, scale=1.0, size=[num_total_batches, self.latent_dim, 1])
+                theta3 = np.random.normal(loc=-1.0, scale=1.0, size=[num_total_batches, self.latent_dim, 1])
+                    
+                thetas['theta_tasks_1'] = theta1
+                thetas['theta_tasks_2'] = theta2
+                thetas['theta_tasks_3'] = theta3
+
+                with open('synthetic_data/thetas.pickle', 'wb') as handle:
+                    pickle.dump(thetas, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                
+            with open('synthetic_data/gauss_features_1.pickle', 'rb') as handle:
+                self.gauss_features = pickle.load(handle)
+            
+            with open('synthetic_data/thetas.pickle', 'rb') as handle:
+                self.thetas = pickle.load(handle)
+            # Repeat the gauss features to generate for the entire batch
+            self.gauss_features = np.expand_dims(self.gauss_features, axis=0)
+            self.gauss_features = np.repeat(
+                self.gauss_features, self.batch_size*self.num_samples_per_class*5, axis=0)
+            
+            self.batch_count = 0
 
         else:
             raise ValueError('Unrecognized data source')
@@ -428,3 +470,80 @@ class DataGenerator(object):
         funcs_params = {'amp': amp, 'phase': phase, 'freq': freq, 'A': A, 'b': b, 'A_q': A_q, 'c_q': c_q, 'b_q': b_q,
                         'A_c': A_c, 'b_c': b_c, 'c_c': c_c, 'd_c': d_c, 'A_3cur': A_3cur, 'B_3cur': B_3cur, 'A_r':A_r, 'B_r':B_r}
         return init_inputs, outputs, funcs_params, sel_set
+
+
+    def generate_syn_batch(self, train=False):  
+
+        # Gaussian coeff for an entire batch. (5 times the number of samples per class)
+        gauss_coeff = np.random.normal(size=[self.batch_size*self.num_samples_per_class*5, 1, self.latent_dim])          
+
+        if FLAGS.synthetic_case == 2:
+            self.gauss_features = np.random.normal(size=[self.latent_dim, self.dim_input])
+            self.gauss_features = np.expand_dims(self.gauss_features, axis=0)
+            self.gauss_features = np.repeat(
+                self.gauss_features, self.batch_size*self.num_samples_per_class*5, axis=0)
+
+        images = np.matmul(gauss_coeff, self.gauss_features)/math.sqrt(self.latent_dim)
+        # Relu function
+        images[images<0] = 0
+
+        if FLAGS.synthetic_case == 0:
+            thetas = self.thetas['theta_tasks_1'][
+                self.batch_size*self.batch_count: self.batch_size*(self.batch_count+1)]
+        else:
+            dist_choice = str(np.random.randint(1,4))
+            thetas = self.thetas['theta_tasks_'+dist_choice][
+                self.batch_size*self.batch_count: self.batch_size*(self.batch_count+1)]
+
+        self.batch_count += 1
+        # Repeat the gauss features to generate for the entire batch
+        thetas = np.expand_dims(thetas, axis=0)
+        thetas = np.repeat(thetas, self.num_samples_per_class*5, axis=0)
+        thetas = thetas.reshape([-1,128,1])
+            
+        # Create labels with gauss teacher function to be {0,1}
+        labels = np.sign(np.matmul(gauss_coeff, thetas)/math.sqrt(self.latent_dim)).astype(int)
+        labels = labels[:,0,0]
+        labels[labels<0] = 0
+
+        # Extract the indices of the two classes
+        cls_a_indices = np.where(labels==0)
+        cls_b_indices = np.where(labels==1)
+
+        # Select the desired number of samples for each class
+        labels_a = labels[cls_a_indices]
+        labels_b = labels[cls_b_indices]
+
+        labels_a = labels_a[0:self.batch_size*self.num_samples_per_class].reshape(
+            self.batch_size, -1,1)
+        labels_b = labels_b[0:self.batch_size*self.num_samples_per_class].reshape(
+            self.batch_size, -1,1)
+        
+        images_a = images[cls_a_indices]
+        images_b = images[cls_b_indices]
+
+        images_a = images_a[0:self.batch_size*self.num_samples_per_class, :, :].reshape(
+            self.batch_size, -1,self.dim_input)
+        images_b = images_b[0:self.batch_size*self.num_samples_per_class, :, :].reshape(
+            self.batch_size, -1,self.dim_input)
+        
+        images_out, labels_out = [], []
+        for i in range(self.batch_size):
+            imgs, labels = [], []
+            for j in range(self.num_samples_per_class):
+                imgs.append(images_a[i][j])
+                imgs.append(images_b[i][j])
+
+                labels.append(labels_a[i][j])
+                labels.append(labels_b[i][j])
+
+            imgs = np.stack(imgs, axis=0)
+            labels = np.stack(labels, axis=0)
+            images_out.append(imgs)
+            labels_out.append(labels)
+
+        images_out = np.stack(images_out, axis=0)
+        labels_out = np.stack(labels_out, axis=0)
+        labels_out = tf.keras.utils.to_categorical(labels_out, num_classes=2, dtype='int')
+
+        return images_out, labels_out

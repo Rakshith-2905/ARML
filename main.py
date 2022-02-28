@@ -12,7 +12,9 @@ from tensorflow.python.platform import flags
 FLAGS = flags.FLAGS
 
 ## Dataset/method options
-flags.DEFINE_string('datasource', 'plainmulti', '2D or plainmulti or artmulti or domainNet')
+flags.DEFINE_string('datasource', 'plainmulti', '2D or plainmulti or artmulti or domainNet or synthetic')
+flags.DEFINE_integer('synthetic_case', 0 ,'case 0 or 1 or 2 in synthetic datasets')
+flags.DEFINE_bool('create_synth', False ,'Does the synthetic data need to be created')
 flags.DEFINE_integer('num_datasets', 4, 'The number of datasets to use plainmulti: 0-5 domainNet: 0-5')
 flags.DEFINE_integer('test_dataset', -1,
                      'which data to be test, plainmulti: 0-3, artmulti: 0-11, -1: random select ')
@@ -77,17 +79,64 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             labelb = batch_y[:, num_classes * FLAGS.update_batch_size:, :]
             feed_dict = {model.inputa: inputa, model.inputb: inputb, model.labela: labela, model.labelb: labelb}
 
+        
+        elif FLAGS.datasource == 'synthetic':
+            image_tensor, label_tensor = data_generator.generate_syn_batch()
+
+            inputa = image_tensor[:, :num_classes * FLAGS.update_batch_size, :]
+            inputb = image_tensor[:, num_classes * FLAGS.update_batch_size:, :]
+            labela = label_tensor[:, :num_classes * FLAGS.update_batch_size, :]
+            labelb = label_tensor[:, num_classes * FLAGS.update_batch_size:, :]
+
+            feed_dict = {model.inputa: inputa, model.inputb: inputb, model.labela: labela, model.labelb: labelb}
+        
         input_tensors = [model.metatrain_op, model.total_embed_loss, model.total_loss1,
                          model.total_losses2[FLAGS.num_updates - 1]]
         if model.classification:
             input_tensors.extend([model.total_accuracy1, model.total_accuracies2[FLAGS.num_updates - 1]])
-
+            
         result = sess.run(input_tensors, feed_dict)
 
-        prelosses.append(result[-2])
-        postlosses.append(result[-1])
-        embedlosses.append(result[2])
+        # prelosses.append(result[-3])
+        # postlosses.append(result[-2])
+        # embedlosses.append(result[-4])
+        # print("diag\n", result[-1])
+        # graph_edges = result[-2]
+        # print('\ngraph_edges\n', graph_edges)
 
+        # proto_graph_edges = result[-3]
+        # print('\nproto_graph_edges\n', proto_graph_edges)
+
+
+        # meta_graph_edges = result[-4]
+        # print('\nmeta_graph_edges\n', meta_graph_edges)
+
+
+        # cross_graph_edges = result[-5]
+        # print('\ncross_graph_edges\n', cross_graph_edges)
+
+        
+        # proto_emb = result[-6]
+        # print("\nproto_emb\n", np.sum(proto_emb[0]), np.sum(proto_emb[1]))
+
+        # input_task_emb = result[-7]
+        # print("\ninput_task_emb\n", np.sum(input_task_emb[0]), np.sum(input_task_emb[1]))
+
+        # print('\nproto_embs\n', proto_emb)
+
+        # proto_graph = []
+        # for idx_i in range(2):
+        #     tmp_dist = []
+        #     for idx_j in range(2):
+        #         if idx_i == idx_j:
+        #             dist = 0
+        #         else:
+        #             dist = np.linalg.norm(proto_emb[idx_i] - proto_emb[idx_j])
+        #         tmp_dist.append(dist)
+        #     proto_graph.append(np.stack(tmp_dist))
+        # proto_graph = np.stack(proto_graph)
+        # print('\nnp_proto_graph_edges\n', proto_graph)
+        
         if (itr != 0) and itr % PRINT_INTERVAL == 0:
             print_str = 'Iteration {}'.format(itr)
             std = np.std(postlosses, 0)
@@ -178,6 +227,8 @@ def main():
             inputb = tf.slice(image_tensor, [0, num_classes * FLAGS.update_batch_size, 0], [-1, -1, -1])
             labela = tf.slice(label_tensor, [0, 0, 0], [-1, num_classes * FLAGS.update_batch_size, -1])
             labelb = tf.slice(label_tensor, [0, num_classes * FLAGS.update_batch_size, 0], [-1, -1, -1])
+            print(inputa.shape, inputb.shape, labela.shape, labelb.shape)
+            assert False
             input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
         else:
             random.seed(6)

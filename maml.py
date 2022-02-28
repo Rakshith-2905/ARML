@@ -27,7 +27,7 @@ class MAML:
                                             name='lstm_ae_graph')
         if FLAGS.datasource in ['2D']:
             self.metagraph = MetaGraph(input_dim=FLAGS.sync_filters, hidden_dim=FLAGS.sync_filters)
-        elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti']:
+        elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti', 'synthetic']:
             self.metagraph = MetaGraph(input_dim=FLAGS.hidden_dim, hidden_dim=FLAGS.hidden_dim)
 
         if FLAGS.datasource in ['2D']:
@@ -35,7 +35,7 @@ class MAML:
             self.loss_func = mse
             self.forward = self.forward_fc
             self.construct_weights = self.construct_fc_weights
-        elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti']:
+        elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti', 'synthetic']:
             self.loss_func = xent
             self.classification = True
             self.dim_hidden = FLAGS.num_filters
@@ -50,12 +50,24 @@ class MAML:
 
     def construct_model(self, input_tensors=None, prefix='metatrain_'):
         if input_tensors is None:
-            self.inputa = tf.placeholder(tf.float32, shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size, 2))
-            self.inputb = tf.placeholder(tf.float32,
-                                         shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size_eval, 2))
-            self.labela = tf.placeholder(tf.float32, shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size, 1))
-            self.labelb = tf.placeholder(tf.float32,
-                                         shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size_eval, 1))
+            if FLAGS.datasource == '2D':
+                self.inputa = tf.placeholder(tf.float32, shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size, 2))
+                self.inputb = tf.placeholder(tf.float32,
+                                            shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size_eval, 2))
+                self.labela = tf.placeholder(tf.float32, shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size, 1))
+                self.labelb = tf.placeholder(tf.float32,
+                                            shape=(FLAGS.meta_batch_size, FLAGS.update_batch_size_eval, 1))
+            else:
+                num_classes = 2
+                outer_loop_samples = 15
+                self.inputa = tf.placeholder(tf.float32, 
+                                            shape=(FLAGS.meta_batch_size, num_classes * FLAGS.update_batch_size, self.dim_input))
+                self.inputb = tf.placeholder(tf.float32,
+                                            shape=(FLAGS.meta_batch_size, num_classes * outer_loop_samples, self.dim_input))
+                self.labela = tf.placeholder(tf.float32, shape=(FLAGS.meta_batch_size, num_classes * FLAGS.update_batch_size, num_classes))
+                self.labelb = tf.placeholder(tf.float32,
+                                            shape=(FLAGS.meta_batch_size, num_classes * outer_loop_samples, 2))
+            
         else:
             self.inputa = input_tensors['inputa']
             self.inputb = input_tensors['inputb']
@@ -85,7 +97,7 @@ class MAML:
                             assign_mat = tf.nn.softmax(tf.layers.dense(input_task_emb, units=FLAGS.num_classes), dim=1)
                             input_task_emb_cat = tf.matmul(tf.transpose(assign_mat, perm=[1, 0]), input_task_emb)
 
-                elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti']:
+                elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti', 'synthetic']:
                     input_task_emb = self.image_embed.model(tf.reshape(inputa,
                                                                        [-1, self.img_size, self.img_size,
                                                                         self.channels]))
@@ -106,7 +118,7 @@ class MAML:
                 if FLAGS.datasource in ['2D']:
                     task_embed_vec, task_emb_loss = self.lstmae.model(input_task_emb)
                     propagate_knowledge = self.metagraph.model(input_task_emb_cat)
-                elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti']:
+                elif FLAGS.datasource in ['plainmulti', 'domainNet', 'artmulti', 'synthetic']:
                     task_embed_vec, task_emb_loss = self.lstmae.model(input_task_emb_cat)
                     propagate_knowledge = self.metagraph.model(proto_emb)
 

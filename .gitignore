@@ -2,3 +2,4 @@ data
 tensorflow:1.15.0-gpu-py3.tar
 logs
 __pycache__
+synthetic_data
