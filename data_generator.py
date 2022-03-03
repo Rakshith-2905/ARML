@@ -32,7 +32,11 @@ class DataGenerator(object):
             self.img_size = config.get('img_size', (84, 84))
             self.dim_input = np.prod(self.img_size) * 3
             self.dim_output = self.num_classes
-            self.plainmulti = ['CUB_Bird', 'DTD_Texture', 'FGVC_Aircraft', 'FGVCx_Fungi']
+            self.plainmulti = ['CUB_Bird', 'DTD_Texture', 'FGVC_Aircraft', 'FGVCx_Fungi', 'vgg_flower', 'GTSRB']
+            # self.plainmulti = ['DTD_Texture', 'FGVC_Aircraft', 'FGVCx_Fungi',  'CUB_Bird', 'vgg_flower', 'GTSRB']
+            
+            print("\n\nDatasets trained and tested on: \n\n", [self.plainmulti[i]\
+                for i in range(self.num_datasets)])
             metatrain_folders, metaval_folders = [], []
             for eachdataset in self.plainmulti:
                 metatrain_folders.append(

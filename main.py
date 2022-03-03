@@ -97,9 +97,9 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             
         result = sess.run(input_tensors, feed_dict)
 
-        # prelosses.append(result[-3])
-        # postlosses.append(result[-2])
-        # embedlosses.append(result[-4])
+        prelosses.append(result[-2])
+        postlosses.append(result[-1])
+        embedlosses.append(result[2])
         # print("diag\n", result[-1])
         # graph_edges = result[-2]
         # print('\ngraph_edges\n', graph_edges)
@@ -227,8 +227,6 @@ def main():
             inputb = tf.slice(image_tensor, [0, num_classes * FLAGS.update_batch_size, 0], [-1, -1, -1])
             labela = tf.slice(label_tensor, [0, 0, 0], [-1, num_classes * FLAGS.update_batch_size, -1])
             labelb = tf.slice(label_tensor, [0, num_classes * FLAGS.update_batch_size, 0], [-1, -1, -1])
-            print(inputa.shape, inputb.shape, labela.shape, labelb.shape)
-            assert False
             input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
         else:
             random.seed(6)
